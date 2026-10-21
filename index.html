@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Power Catch AR - เกมคณิตศาสตร์เลขยกกำลัง</title>
+    <title>Power Battle AR - เกมต่อสู้เลขยกกำลัง</title>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,6 +14,9 @@
     <!-- MediaPipe Hands (pinned versions so a new release can't break the game) -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+
+    <!-- Rules and questions -->
+    <script src="logic.js"></script>
 
     <style>
         body {
@@ -49,67 +52,20 @@
             opacity: 0;
         }
 
-        /* Animations for Levels */
-        /* Level 1 bounces back and forth inside the screen, so answers never disappear off-screen */
-        @keyframes moveLeftRight {
-            0% { left: 2%; }
-            100% { left: calc(98% - 170px); }
-        }
-
-        @keyframes floatUp {
-            0% { bottom: -25%; transform: translateX(0) rotate(-5deg); }
-            50% { transform: translateX(30px) rotate(5deg); }
-            100% { bottom: 110%; transform: translateX(-20px) rotate(-2deg); }
-        }
-
-        /* Level 1: Moving Option */
-        .level1-option {
-            position: absolute;
-            width: 170px;
-            animation: moveLeftRight 14s ease-in-out infinite alternate;
-            text-align: center;
-        }
-
-        /* Level 2: Balloon Option */
-        .level2-option {
-            position: absolute;
-            animation: floatUp 14s linear infinite;
-            width: 100px;
-            height: 120px;
-            background: radial-gradient(circle at 30% 30%, #ff8a00, #e52e71);
-            border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            box-shadow: inset -5px -5px 10px rgba(0,0,0,0.2), 0 5px 15px rgba(0,0,0,0.3);
-        }
-
-        .level2-option::after {
-            content: "";
-            position: absolute;
-            bottom: -20px;
-            left: 50%;
-            width: 2px;
-            height: 30px;
-            background-color: rgba(0,0,0,0.5);
-        }
-
-        /* Level 3: Box Option */
-        .level3-option {
-            transition: transform 0.2s;
-        }
-
-        /* Pointer is on this target: freeze it so it can be selected, and highlight it */
+        /* Pointer is on this answer */
         .is-hovered {
-            animation-play-state: paused !important;
             outline: 5px solid #22c55e;
             outline-offset: 4px;
-        }
-        .level3-option.is-hovered {
             transform: scale(1.05);
         }
+
+        /* Fighter took damage */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        .shake { animation: shake 0.15s linear 3; background-color: #fee2e2; }
 
         /* Video Output */
         .video-feed {
@@ -134,16 +90,16 @@
 
     <!-- Background Camera Video -->
     <video id="input_video" class="video-feed hidden" autoplay playsinline></video>
-    <!-- Above the game screen (z-10) so answer boxes never hide the hand, below the modal (z-50) -->
+    <!-- Above the game screen (z-10) so answer boxes never hide the hand, below the announcements (z-40) -->
     <canvas id="output_canvas" class="absolute top-0 left-0 w-full h-full z-20 pointer-events-none hidden"></canvas>
 
     <!-- UI Container -->
     <div id="app-container" class="relative w-full h-full flex flex-col items-center justify-center">
 
         <!-- Screen 1: Main Menu -->
-        <div id="screen-menu" class="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-8 text-center m-4 z-10">
-            <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mb-4 tracking-wider">POWER CATCH AR</h1>
-            <p class="text-xl text-gray-600 mb-8 font-semibold">เกมฝึกทักษะคณิตศาสตร์: เลขยกกำลัง</p>
+        <div id="screen-menu" class="w-full max-w-xl bg-white rounded-3xl shadow-2xl p-8 text-center m-4 z-10">
+            <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mb-2 tracking-wider">POWER BATTLE AR</h1>
+            <p class="text-xl text-gray-600 mb-6 font-semibold">เกมต่อสู้คณิตศาสตร์: เลขยกกำลัง ม.2</p>
 
             <div class="space-y-4">
                 <button onclick="startGame('ar')" class="w-full py-4 px-6 bg-gradient-to-r from-green-400 to-green-600 text-white text-2xl font-bold rounded-xl shadow-lg hover:scale-105 transition-transform">
@@ -154,8 +110,11 @@
                 </button>
             </div>
 
-            <div class="mt-6 text-sm text-gray-500 text-left bg-gray-100 p-4 rounded-lg">
-                <p><strong>วิธีการเล่นโหมด AR:</strong> ชูมือขึ้นหน้ากล้อง ใช้นิ้วชี้เล็งไปที่คำตอบ แล้วค้างไว้จนวงสีเขียวครบรอบ (ประมาณ 1 วินาที) ปุ่ม "ไปต่อ" ก็ใช้นิ้วชี้ค้างไว้แบบเดียวกัน</p>
+            <div class="mt-6 text-sm text-gray-600 text-left bg-gray-100 p-4 rounded-lg space-y-1">
+                <p><strong>ตาเราโจมตี:</strong> ตอบข้อหลักให้ถูกใน 10 วินาที แล้วชูนิ้วเลือกอาวุธ ถ้าตอบผิดจะเสียเทิร์น</p>
+                <p>☝️ 1 นิ้ว 🗡️ ดาบ (ดาเมจ 15 + ฮีล 10) · ✌️ 2 นิ้ว 🏹 ธนู (ดาเมจ 40 พลาดได้ 50%) · 3 นิ้ว 🪄 คทา (พิษ 10 × 3 เทิร์น)</p>
+                <p><strong>ตาบอทโจมตี:</strong> ตอบข้อโบนัสให้ถูกใน 5 วินาที แล้วชูนิ้วเลือก 1 🛡️ โล่ลดดาเมจ 50% · 2 🪞 สะท้อน 50% · 3 💚 ฮีล 15</p>
+                <p><strong>โหมด AR:</strong> ชี้นิ้วชี้ค้างที่คำตอบจนวงสีเขียวครบรอบ ส่วนตอนเลือกอาวุธหรือบัฟ ให้ชูนิ้วค้างไว้จนแถบเต็ม (โหมดเมาส์: คลิก หรือกดแป้น 1 2 3)</p>
             </div>
         </div>
 
@@ -168,72 +127,61 @@
         <!-- Screen 3: Game -->
         <div id="screen-game" class="hidden w-full h-full flex flex-col z-10 relative">
 
-            <!-- HUD -->
-            <div class="w-full p-4 flex justify-between items-start">
-                <div class="bg-white/90 backdrop-blur-sm rounded-2xl p-3 shadow-lg border-2 border-blue-200">
-                    <p class="text-lg font-bold text-gray-600">ด่าน: <span id="hud-level" class="text-blue-600 text-2xl">1</span></p>
-                    <p class="text-lg font-bold text-gray-600">ข้อ: <span id="hud-qnum" class="text-blue-600 text-2xl">1</span>/5</p>
+            <!-- HUD: player | turn + timer | bot -->
+            <div class="w-full p-4 flex justify-between items-start gap-4">
+                <div id="fighter-player" class="flex-1 max-w-sm bg-white/90 backdrop-blur-sm rounded-2xl p-3 shadow-lg border-2 border-blue-300">
+                    <p class="text-xl font-bold">🧑‍🎓 คุณ <span id="poison-player" class="text-base text-purple-600"></span></p>
+                    <div class="w-full h-5 bg-gray-200 rounded-full overflow-hidden mt-1">
+                        <div id="hp-bar-player" class="h-full bg-green-500 transition-all duration-500" style="width:100%"></div>
+                    </div>
+                    <p class="text-lg font-bold text-gray-600">❤️ <span id="hp-player">100</span>/100</p>
                 </div>
 
                 <div class="flex flex-col items-center">
-                    <div id="hud-time-box" class="bg-white/90 backdrop-blur-sm rounded-full w-24 h-24 flex items-center justify-center shadow-lg border-4 border-red-400">
-                        <span id="hud-time" class="text-4xl font-extrabold text-red-500">20</span>
+                    <p id="hud-turn" class="text-lg font-bold bg-white/90 rounded-full px-4 py-1 shadow mb-2 whitespace-nowrap">-</p>
+                    <div id="hud-time-box" class="bg-white/90 backdrop-blur-sm rounded-full w-20 h-20 flex items-center justify-center shadow-lg border-4 border-red-400">
+                        <span id="hud-time" class="text-4xl font-extrabold text-red-500">-</span>
                     </div>
+                    <p class="text-sm font-bold text-gray-600 mt-1 bg-white/80 rounded px-2">ข้อหลัก <span id="hud-main">0</span>/20</p>
                 </div>
 
-                <div class="bg-white/90 backdrop-blur-sm rounded-2xl p-3 shadow-lg border-2 border-green-200 text-right">
-                    <p class="text-lg font-bold text-gray-600">คะแนน: <span id="hud-score" class="text-green-600 text-2xl">0</span></p>
-                    <p id="hud-streak-container" class="text-sm font-bold text-orange-500 hidden mt-1">🔥 ต่อเนื่อง x<span id="hud-streak">0</span> (+<span id="hud-bonus">0</span>)</p>
-                    <p class="text-sm font-bold text-gray-500 mt-1">ถูกครั้งแรก: <span id="hud-accuracy">-</span></p>
+                <div id="fighter-bot" class="flex-1 max-w-sm bg-white/90 backdrop-blur-sm rounded-2xl p-3 shadow-lg border-2 border-red-300 text-right">
+                    <p class="text-xl font-bold"><span id="poison-bot" class="text-base text-purple-600"></span> บอท 🤖</p>
+                    <div class="w-full h-5 bg-gray-200 rounded-full overflow-hidden mt-1">
+                        <div id="hp-bar-bot" class="h-full bg-green-500 transition-all duration-500 ml-auto" style="width:100%"></div>
+                    </div>
+                    <p class="text-lg font-bold text-gray-600">❤️ <span id="hp-bot">100</span>/100</p>
                 </div>
             </div>
 
             <!-- Question -->
             <div class="w-full flex justify-center mt-2 px-4">
                 <div class="bg-white/95 backdrop-blur-md rounded-3xl py-4 px-8 shadow-2xl max-w-4xl border-b-8 border-blue-500 text-center">
-                    <h2 id="question-text" class="text-3xl md:text-5xl font-extrabold text-gray-800 leading-tight">Question goes here?</h2>
+                    <p id="question-label" class="text-lg font-bold text-blue-600"></p>
+                    <h2 id="question-text" class="text-3xl md:text-5xl font-extrabold text-gray-800 leading-tight"></h2>
                 </div>
             </div>
 
-            <!-- Choices Area -->
-            <div id="choices-container" class="flex-grow relative w-full h-full overflow-hidden mt-4">
-                <!-- Choices injected here -->
-            </div>
+            <!-- Answers or weapon/buff cards go here -->
+            <div id="choices-container" class="flex-grow relative w-full flex items-center justify-center gap-3 md:gap-6 px-4"></div>
 
-            <!-- Level Intro Overlay -->
-            <div id="level-intro" class="hidden absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-lg w-full text-center">
-                    <div id="level-intro-icon" class="text-7xl mb-4">➡️</div>
-                    <h2 id="level-intro-title" class="text-4xl font-extrabold text-blue-600 mb-3">ด่าน 1</h2>
-                    <p id="level-intro-desc" class="text-2xl text-gray-700 font-medium">รายละเอียด</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal (Feedback) -->
-        <div id="modal-feedback" class="hidden absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div id="modal-content" class="bg-white rounded-3xl shadow-2xl p-8 max-w-lg w-full text-center transform scale-95 transition-transform duration-300">
-                <h3 id="modal-title" class="text-4xl font-extrabold mb-4">สถานะ</h3>
-                <p id="modal-desc" class="text-2xl text-gray-700 mb-8 font-medium">รายละเอียด</p>
-                <button id="modal-btn" onclick="handleModalButton()" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white text-2xl font-bold rounded-xl shadow-lg transition-colors">
-                    ไปต่อ
-                </button>
+            <!-- Announcement Overlay -->
+            <div id="announce" class="hidden absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/30">
+                <div id="announce-text" class="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full text-center text-3xl font-bold leading-relaxed"></div>
             </div>
         </div>
 
         <!-- Screen 4: Game Over -->
         <div id="screen-game-over" class="hidden w-full max-w-lg bg-white rounded-3xl shadow-2xl p-8 text-center m-4 z-10 relative overflow-hidden">
-            <div class="absolute -top-10 -left-10 text-9xl opacity-20">🎉</div>
-            <div class="absolute -bottom-10 -right-10 text-9xl opacity-20">🏆</div>
-            <h1 class="text-5xl font-extrabold text-green-600 mb-6 relative z-10">สรุปผลการเรียน!</h1>
+            <h1 id="final-title" class="text-5xl font-extrabold text-green-600 mb-6"></h1>
 
-            <div class="space-y-4 mb-8 relative z-10 bg-blue-50 p-6 rounded-2xl border-2 border-blue-200">
-                <p class="text-3xl font-bold text-gray-800">คะแนนรวม: <span id="final-score" class="text-blue-600">0</span></p>
-                <p class="text-2xl font-bold text-gray-700">ตอบถูก: <span id="final-correct">0</span> / 15</p>
-                <p class="text-2xl font-bold text-gray-700">ถูกตั้งแต่ครั้งแรก: <span id="final-accuracy">0%</span></p>
+            <div class="space-y-3 mb-8 bg-blue-50 p-6 rounded-2xl border-2 border-blue-200">
+                <p class="text-2xl font-bold text-gray-700">❤️ คุณ <span id="final-hp-player"></span> · บอท <span id="final-hp-bot"></span></p>
+                <p class="text-2xl font-bold text-gray-700">ข้อหลักตอบถูก: <span id="final-main"></span></p>
+                <p class="text-2xl font-bold text-gray-700">ข้อโบนัสตอบถูก: <span id="final-bonus"></span></p>
             </div>
 
-            <button onclick="location.reload()" class="w-full py-4 px-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-2xl font-bold rounded-xl shadow-lg hover:scale-105 transition-transform relative z-10">
+            <button onclick="location.reload()" class="w-full py-4 px-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-2xl font-bold rounded-xl shadow-lg hover:scale-105 transition-transform">
                 🔄 เล่นอีกครั้ง
             </button>
         </div>
@@ -241,82 +189,35 @@
     </div>
 
     <script>
-        // ==========================================
-        // Game Data & Questions
-        // ==========================================
-        const questionsDB = {
-            1: [ // ด่าน 1: หาค่าเลขยกกำลัง (ตัวเลือกเคลื่อนที่ซ้ายไปขวา)
-                { q: "2³ มีค่าเท่าใด?", options: ["8", "6", "9"], ans: "8", hint: "ลองเขียน 2 คูณกัน 3 ตัวดูนะ (2 x 2 x 2)", exp: "2³ = 2 x 2 x 2 = 8" },
-                { q: "5² มีค่าเท่าใด?", options: ["25", "10", "125"], ans: "25", hint: "5 คูณกับตัวมันเอง 1 ครั้ง", exp: "5² = 5 x 5 = 25" },
-                { q: "(-3)² มีค่าเท่าใด?", options: ["9", "-9", "6"], ans: "9", hint: "ลบคูณลบ เป็นบวกนะ!", exp: "(-3)² = (-3) x (-3) = 9" },
-                { q: "10⁴ มีค่าเท่าใด?", options: ["10000", "1000", "40"], ans: "10000", hint: "สังเกตจำนวนเลขศูนย์ตามเลขชี้กำลัง", exp: "10⁴ = 10 x 10 x 10 x 10 = 10,000" },
-                { q: "7⁰ มีค่าเท่าใด?", options: ["1", "0", "7"], ans: "1", hint: "จำนวนใดๆ (ที่ไม่ใช่ศูนย์) ยกกำลัง 0 มีค่าเท่าใด?", exp: "สมบัติเลขยกกำลัง: a⁰ = 1 เสมอ (เมื่อ a ≠ 0)" },
-                { q: "3⁴ มีค่าเท่าใด?", options: ["81", "12", "27"], ans: "81", hint: "ลองคำนวณ 3x3 แล้วเอาไปคูณ 3x3 ดู", exp: "3⁴ = 3 x 3 x 3 x 3 = 81" }
-            ],
-            2: [ // ด่าน 2: สมบัติเลขยกกำลัง (ลูกโป่งลอย)
-                { q: "2³ × 2⁴ มีค่าเท่าใด?", options: ["2⁷", "2¹²", "4⁷"], ans: "2⁷", hint: "ฐานเหมือนกันคูณกัน ให้นำเลขชี้กำลังมาบวกกัน", exp: "2³ × 2⁴ = 2⁽³⁺⁴⁾ = 2⁷" },
-                { q: "5⁶ ÷ 5² มีค่าเท่าใด?", options: ["5⁴", "5³", "5⁸"], ans: "5⁴", hint: "ฐานเหมือนกันหารกัน ให้นำเลขชี้กำลังมาลบกัน", exp: "5⁶ ÷ 5² = 5⁽⁶⁻²⁾ = 5⁴" },
-                { q: "(3²)³ มีค่าเท่าใด?", options: ["3⁶", "3⁵", "9³"], ans: "3⁶", hint: "กำลังซ้อนกัน ให้นำเลขชี้กำลังมาคูณกัน", exp: "(3²)³ = 3⁽²ˣ³⁾ = 3⁶" },
-                { q: "2² × 3² มีค่าเท่าใด?", options: ["6²", "5²", "6⁴"], ans: "6²", hint: "เลขชี้กำลังเหมือนกัน นำฐานมาคูณกันก่อนได้", exp: "2² × 3² = (2 × 3)² = 6²" },
-                { q: "a³ × a⁵ มีค่าเท่าใด?", options: ["a⁸", "a¹⁵", "a²"], ans: "a⁸", hint: "คูณกัน ฐานเหมือนกัน จับเลขชี้กำลังรวมกัน", exp: "a³ × a⁵ = a⁽³⁺⁵⁾ = a⁸" },
-                { q: "x⁷ ÷ x⁴ มีค่าเท่าใด?", options: ["x³", "x¹¹", "x²⁸"], ans: "x³", hint: "หารกัน ฐานเหมือนกัน จับเลขชี้กำลังลบกัน", exp: "x⁷ ÷ x⁴ = x⁽⁷⁻⁴⁾ = x³" }
-            ],
-            3: [ // ด่าน 3: โจทย์ปัญหา (กล่องอยู่นิ่ง)
-                { q: "แบคทีเรียแบ่งตัวเป็น 2 เท่าทุกๆ ชั่วโมง ผ่านไป 3 ชม. จะมีกี่เซลล์ (เริ่ม 1 เซลล์)?", options: ["8", "6", "9"], ans: "8", hint: "ลองคำนวณ 2 ยกกำลัง 3 ดูสิ", exp: "1 × 2³ = 1 × 8 = 8 เซลล์" },
-                { q: "กล่องลูกบาศก์มีด้านยาว 4 ซม. จะมีปริมาตรเท่าใด?", options: ["64", "16", "12"], ans: "64", hint: "ปริมาตรลูกบาศก์ = ด้าน × ด้าน × ด้าน", exp: "4³ = 4 × 4 × 4 = 64 ลบ.ซม." },
-                { q: "พื้นที่ 100 ตร.ม. ของรูปสี่เหลี่ยมจัตุรัส ด้านแต่ละด้านยาวเท่าใด?", options: ["10", "50", "25"], ans: "10", hint: "พื้นที่จัตุรัส = ด้าน × ด้าน ลองเอาแต่ละตัวเลือกมายกกำลังสองดู", exp: "ด้าน² = 100 ดังนั้น ด้าน = 10 ม. (เพราะ 10² = 100)" },
-                { q: "มีกล่อง 10 กล่อง แต่ละกล่องมีลูกแก้ว 10² ลูก รวมมีลูกแก้วกี่ลูก?", options: ["1000", "100", "20"], ans: "1000", hint: "10 × 10² ฐานเหมือนกัน นำเลขชี้กำลังมาบวกกัน", exp: "10¹ × 10² = 10³ = 1000 ลูก" },
-                { q: "คอมพิวเตอร์มีความจุ 2¹⁰ ไบต์ มีค่าเท่ากับกี่ไบต์?", options: ["1024", "1000", "2048"], ans: "1024", hint: "2 คูณกัน 10 ครั้ง มีค่าเกินพันนิดๆ", exp: "2¹⁰ = 1024 ไบต์" },
-                { q: "กระดาษหนา 0.1 มม. พับครึ่ง 3 ครั้ง จะหนาเท่าไหร่?", options: ["0.8", "0.6", "0.4"], ans: "0.8", hint: "พับ 1 ครั้งหนา 2 เท่า (ใช้ 2³)", exp: "0.1 × 2³ = 0.1 × 8 = 0.8 มม." }
-            ]
-        };
-
-        const LEVEL_INFO = {
-            1: { icon: "➡️", title: "ด่าน 1: หาค่าเลขยกกำลัง", desc: "คำตอบจะเลื่อนไปมาซ้าย-ขวา ชี้ค้างไว้แล้วคำตอบจะหยุดให้" },
-            2: { icon: "🎈", title: "ด่าน 2: สมบัติเลขยกกำลัง", desc: "คำตอบอยู่บนลูกโป่งที่ลอยขึ้น ชี้ค้างไว้ให้ทัน!" },
-            3: { icon: "📦", title: "ด่าน 3: โจทย์ปัญหา", desc: "คำตอบอยู่นิ่ง มีเวลาคิด 30 วินาที" }
-        };
-        const QUESTION_TIME = { 1: 20, 2: 20, 3: 30 };
-        const RETRY_TIME = 10;          // seconds for the second try after a wrong answer
-        const MODAL_READ_DELAY = 1200;  // ms before the modal button accepts a dwell, so players read first
-        const LEVEL_INTRO_TIME = 3500;  // ms
+        const HOVER_THRESHOLD = 800;  // ms of pointing to pick an answer
+        const PICK_HOLD = 1000;       // ms of holding up the same finger count to pick a weapon/buff
+        const PICK_GRACE = 600;       // ms ignored at the start, so the finger used for answering doesn't pick by accident
+        const FINGER_RATIO = 1.2;     // tip this much farther from the wrist than the middle joint = finger is up (calibration knob)
 
         // ==========================================
         // Game State
         // ==========================================
-        let gameState = {
-            mode: 'mouse', // 'ar' or 'mouse'
-            level: 1,
-            qIndex: 0,
-            score: 0,
-            streak: 0,
-            totalCorrect: 0,      // correct on either try
-            firstTryCorrect: 0,
-            totalAnswered: 0,     // questions finished
-            attempt: 1,
-            wrongPicks: [],
-            timeLeft: 20,
-            timerInterval: null,
-            qToken: 0,            // invalidates stale speech callbacks
-            currentQuestions: [],
-            currentQData: null,
-            isAnswering: false,
-            modalAction: 'next',  // 'next' | 'retry'
-            modalReadyAt: 0,
-        };
+        const player = newFighter('คุณ');
+        const bot = newFighter('บอท');
+        let mode = 'mouse';
+        let mainQueue = [], bonusQueue = [];
+        const stats = { mainRight: 0, mainAsked: 0, bonusRight: 0, bonusAsked: 0 };
+
+        // Waiting for the player: only one of these is set at a time
+        let answerResolve = null;   // ask()
+        let pickResolve = null;     // pick()
+        let timerInterval = null;
 
         // Pointer state for interaction
         let pointer = { x: -100, y: -100, active: false, hoverTarget: null, hoverTime: 0 };
-        const HOVER_THRESHOLD = 900; // ms required to select an answer
+        let fingers = { count: 0, held: 0, holdTime: 0, readyAt: 0 };
         let lastFrameTime = performance.now();
-        let animationFrameId;
 
         // UI Elements
-        const arPointer = document.getElementById('ar-pointer');
-        const arPointerProgress = document.getElementById('ar-pointer-progress');
-        const choicesContainer = document.getElementById('choices-container');
-        const modalEl = document.getElementById('modal-feedback');
-        const modalBtn = document.getElementById('modal-btn');
+        const $ = id => document.getElementById(id);
+        const arPointer = $('ar-pointer');
+        const arPointerProgress = $('ar-pointer-progress');
+        const choicesContainer = $('choices-container');
 
         // ==========================================
         // Utility Functions
@@ -329,215 +230,280 @@
             return array;
         }
 
-        // onEnd fires once: when speech finishes, or after an estimated duration
-        // (some browsers have no Thai voice or never fire onend)
-        function speak(text, onEnd) {
-            let done = false;
-            const finish = () => {
-                if (done) return;
-                done = true;
-                if (onEnd) onEnd();
-            };
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                const msg = new SpeechSynthesisUtterance(text);
-                msg.lang = 'th-TH';
-                msg.onend = finish;
-                msg.onerror = finish;
-                window.speechSynthesis.speak(msg);
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const randomItem = arr => arr[Math.floor(Math.random() * arr.length)];
+
+        function speak(text) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const msg = new SpeechSynthesisUtterance(text);
+            msg.lang = 'th-TH';
+            window.speechSynthesis.speak(msg);
+        }
+
+        async function announce(html, spoken, ms = 1800) {
+            $('announce-text').innerHTML = html;
+            $('announce').classList.remove('hidden');
+            if (spoken) speak(spoken);
+            await sleep(ms);
+            $('announce').classList.add('hidden');
+        }
+
+        function renderFighters() {
+            for (const [f, id] of [[player, 'player'], [bot, 'bot']]) {
+                $('hp-' + id).innerText = f.hp;
+                const bar = $('hp-bar-' + id);
+                bar.style.width = (f.hp / MAX_HP * 100) + '%';
+                bar.className = bar.className.replace(/bg-\w+-500/, f.hp > 50 ? 'bg-green-500' : f.hp > 25 ? 'bg-yellow-500' : 'bg-red-500');
+                $('poison-' + id).innerText = f.poison ? `☠️×${f.poison}` : '';
             }
-            if (onEnd) setTimeout(finish, Math.min(8000, 1500 + text.length * 90));
+        }
+
+        // Shake whoever lost HP since `before`
+        function flashHits(before) {
+            for (const [f, id, hp] of [[player, 'player', before[0]], [bot, 'bot', before[1]]]) {
+                if (f.hp >= hp) continue;
+                const el = $('fighter-' + id);
+                el.classList.remove('shake');
+                void el.offsetWidth; // restart the animation
+                el.classList.add('shake');
+            }
+            renderFighters();
+        }
+
+        function setTurn(text) {
+            $('hud-turn').innerText = text;
+            $('question-label').innerText = '';
+            $('question-text').innerText = '';
+            choicesContainer.innerHTML = '';
         }
 
         // ==========================================
-        // Initialization & Flow
+        // Asking a question (resolves true/false)
         // ==========================================
-        async function startGame(mode) {
-            gameState.mode = mode;
-            document.getElementById('screen-menu').classList.add('hidden');
-
-            // Speak to unlock audio context
-            speak("เริ่มเกม พาวเวอร์แคช เออาร์");
-
-            if (mode === 'ar') {
-                document.getElementById('screen-loading').classList.remove('hidden');
-                await setupMediaPipe();
-            } else {
-                document.addEventListener('mousemove', handleMouseMove);
-                document.addEventListener('touchstart', handleTouchMove, {passive: true});
-                document.addEventListener('touchmove', handleTouchMove, {passive: true});
-                startLevel(1);
-            }
-        }
-
-        function startLevel(level) {
-            gameState.level = level;
-            gameState.qIndex = 0;
-            // Get 5 random questions for this level
-            gameState.currentQuestions = shuffle([...questionsDB[level]]).slice(0, 5);
-
-            document.getElementById('screen-loading').classList.add('hidden');
-            document.getElementById('screen-game').classList.remove('hidden');
-
-            // Setup Interaction Loop
-            lastFrameTime = performance.now();
-            if(!animationFrameId) gameLoop();
-
-            // Level intro: tell the player what changes in this level, then start automatically
-            gameState.isAnswering = true;
+        function ask(q, seconds, label) {
+            $('question-label').innerText = label;
+            $('question-text').innerText = q.q || `${q.e} = ?`;
             choicesContainer.innerHTML = '';
-            document.getElementById('hud-level').innerText = level;
-            document.getElementById('hud-qnum').innerText = 1;
-            document.getElementById('question-text').innerText = LEVEL_INFO[level].title;
-            document.getElementById('hud-time').innerText = QUESTION_TIME[level];
-
-            const info = LEVEL_INFO[level];
-            document.getElementById('level-intro-icon').innerText = info.icon;
-            document.getElementById('level-intro-title').innerText = info.title;
-            document.getElementById('level-intro-desc').innerText = info.desc;
-            const intro = document.getElementById('level-intro');
-            intro.classList.remove('hidden');
-            speak(info.title + " " + info.desc);
-
-            setTimeout(() => {
-                intro.classList.add('hidden');
-                loadQuestion();
-            }, LEVEL_INTRO_TIME);
-        }
-
-        function loadQuestion() {
-            if (gameState.qIndex >= 5) {
-                // Next level or finish
-                if (gameState.level < 3) {
-                    startLevel(gameState.level + 1);
-                } else {
-                    endGame();
-                }
-                return;
-            }
-
-            gameState.isAnswering = false;
-            gameState.attempt = 1;
-            gameState.wrongPicks = [];
-            gameState.currentQData = gameState.currentQuestions[gameState.qIndex];
-
-            // Update HUD
-            document.getElementById('hud-level').innerText = gameState.level;
-            document.getElementById('hud-qnum').innerText = gameState.qIndex + 1;
-            document.getElementById('question-text').innerText = gameState.currentQData.q;
-
-            // Render Choices (answering early is allowed)
-            renderChoices();
-
-            // The clock starts only after the question has been read aloud
-            stopTimer();
-            gameState.timeLeft = QUESTION_TIME[gameState.level];
-            updateTimerDisplay();
-            const token = ++gameState.qToken;
-            speak(gameState.currentQData.q, () => {
-                if (token === gameState.qToken && !gameState.isAnswering) startTimer(QUESTION_TIME[gameState.level]);
-            });
-        }
-
-        function startTimer(seconds) {
-            stopTimer();
-            gameState.timeLeft = seconds;
-            updateTimerDisplay();
-            gameState.timerInterval = setInterval(() => {
-                if(!gameState.isAnswering) {
-                    gameState.timeLeft--;
-                    updateTimerDisplay();
-                    if (gameState.timeLeft <= 0) {
-                        handleAnswerTimeout();
-                    }
-                }
-            }, 1000);
-        }
-
-        function stopTimer() {
-            clearInterval(gameState.timerInterval);
-            gameState.timerInterval = null;
-        }
-
-        function renderChoices() {
-            choicesContainer.innerHTML = '';
-            const opts = shuffle(gameState.currentQData.options.filter(o => !gameState.wrongPicks.includes(o)));
-
-            // Level 3 boxes sit in a responsive row instead of fixed percentages
-            let parent = choicesContainer;
-            if (gameState.level === 3) {
-                parent = document.createElement('div');
-                parent.className = 'absolute inset-0 flex items-center justify-center gap-3 md:gap-6 px-4';
-                choicesContainer.appendChild(parent);
-            }
-
-            opts.forEach((opt, idx) => {
+            shuffle([...q.o]).forEach(opt => {
                 const el = document.createElement('div');
                 el.innerText = opt;
-                el.className = 'choice-element flex items-center justify-center cursor-pointer select-none';
                 el.dataset.answer = opt;
+                el.className = 'choice-element flex-1 max-w-xs flex items-center justify-center cursor-pointer select-none bg-white border-4 border-blue-400 text-blue-700 text-4xl md:text-5xl font-bold py-10 px-2 rounded-3xl shadow-lg transition-transform';
+                el.onclick = () => { if (mode === 'mouse') submitAnswer(opt); };
+                choicesContainer.appendChild(el);
+            });
 
-                if (gameState.level === 1) {
-                    // Moving back and forth, always on screen
-                    el.classList.add('level1-option', 'bg-gradient-to-r', 'from-blue-400', 'to-indigo-500', 'text-white', 'text-3xl', 'md:text-4xl', 'font-bold', 'py-4', 'px-4', 'rounded-2xl', 'shadow-xl');
-                    const duration = 14 + idx * 3;
-                    el.style.top = `${12 + (idx * 28)}%`;
-                    el.style.animationDuration = `${duration}s`; // Stagger speeds
-                    el.style.animationDelay = `-${idx * duration * 0.6}s`;
-                } else if (gameState.level === 2) {
-                    // Floating Balloons
-                    el.classList.add('level2-option', 'text-4xl');
-                    const duration = 14 + idx * 2;
-                    el.style.left = `calc(${(idx + 0.5) * 33.33}% - 50px)`;
-                    el.style.animationDuration = `${duration}s`;
-                    el.style.animationDelay = `-${3 + idx * duration / 3}s`;
-                } else {
-                    // Stationary Boxes Row
-                    el.classList.add('level3-option', 'flex-1', 'max-w-xs', 'bg-white', 'border-4', 'border-blue-400', 'text-blue-700', 'text-4xl', 'md:text-5xl', 'font-bold', 'py-10', 'px-2', 'rounded-3xl', 'shadow-lg');
-                }
+            let timeLeft = seconds;
+            const showTime = () => {
+                $('hud-time').innerText = timeLeft;
+                $('hud-time-box').classList.toggle('animate-pulse', timeLeft <= 3);
+            };
+            showTime();
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                showTime();
+                if (timeLeft <= 0) submitAnswer(null);
+            }, 1000);
 
-                // Allow direct clicking/tapping in mouse mode
-                el.onclick = () => {
-                    if(!gameState.isAnswering && gameState.mode === 'mouse') submitAnswer(opt);
+            return new Promise(resolve => {
+                answerResolve = async ans => {
+                    const ok = ans === q.o[0];
+                    // Show the right answer in green, a wrong pick in red
+                    choicesContainer.querySelectorAll('.choice-element').forEach(el => {
+                        if (el.dataset.answer === q.o[0]) el.classList.replace('border-blue-400', 'border-green-500');
+                        else if (el.dataset.answer === ans) el.classList.replace('border-blue-400', 'border-red-500');
+                    });
+                    const head = ok ? '✅ ถูกต้อง!' : ans === null ? '⏰ หมดเวลา!' : '❌ ยังไม่ถูก';
+                    await announce(`${head}<br><span class="text-2xl text-gray-600">คำตอบคือ <span class="text-green-600">${q.o[0]}</span></span>`,
+                        ok ? 'ถูกต้อง' : ans === null ? 'หมดเวลา' : 'ยังไม่ถูก', 1600);
+                    resolve(ok);
                 };
-
-                parent.appendChild(el);
             });
         }
 
-        function updateTimerDisplay() {
-            document.getElementById('hud-time').innerText = gameState.timeLeft;
-            const box = document.getElementById('hud-time-box');
-            if (gameState.timerInterval && gameState.timeLeft <= 5) box.classList.add('animate-pulse', 'bg-red-100');
-            else box.classList.remove('animate-pulse', 'bg-red-100');
+        function submitAnswer(ans) {
+            if (!answerResolve) return;
+            const r = answerResolve;
+            answerResolve = null;
+            clearInterval(timerInterval);
+            $('hud-time-box').classList.remove('animate-pulse');
+            setHoverTarget(null);
+            r(ans);
         }
 
         // ==========================================
-        // Interaction Logic
+        // Picking a weapon or buff with 1/2/3 fingers (resolves the chosen item)
         // ==========================================
-        function handleMouseMove(e) {
-            pointer.x = e.clientX;
-            pointer.y = e.clientY;
-            pointer.active = true;
+        function pick(items, label) {
+            $('question-label').innerText = label;
+            $('question-text').innerText = mode === 'ar' ? 'ชูนิ้วค้างไว้จนแถบเต็ม' : 'คลิก หรือกดแป้น 1 2 3';
+            $('hud-time').innerText = '-';
+            choicesContainer.innerHTML = '';
+            items.forEach((item, i) => {
+                const el = document.createElement('div');
+                el.className = 'pick-card flex-1 max-w-xs bg-white border-4 border-purple-300 rounded-3xl shadow-lg p-4 text-center cursor-pointer select-none transition-transform';
+                el.innerHTML = `
+                    <div class="text-lg font-bold text-purple-600">${i + 1} นิ้ว</div>
+                    <div class="text-6xl my-2">${item.icon}</div>
+                    <div class="text-3xl font-extrabold">${item.name}</div>
+                    <div class="text-base text-gray-600">${item.desc}</div>
+                    <div class="w-full h-3 bg-gray-200 rounded-full overflow-hidden mt-3"><div class="pick-progress h-full bg-purple-500" style="width:0%"></div></div>`;
+                el.onclick = () => choosePick(i);
+                choicesContainer.appendChild(el);
+            });
+            fingers.held = 0;
+            fingers.holdTime = 0;
+            fingers.readyAt = performance.now() + PICK_GRACE;
+            return new Promise(resolve => {
+                pickResolve = i => resolve(items[i]);
+            });
         }
 
-        function handleTouchMove(e) {
-            pointer.x = e.touches[0].clientX;
-            pointer.y = e.touches[0].clientY;
-            pointer.active = true;
+        function choosePick(i) {
+            if (!pickResolve || !choicesContainer.children[i]) return;
+            const r = pickResolve;
+            pickResolve = null;
+            r(i);
         }
 
-        function isModalOpen() {
-            return !modalEl.classList.contains('hidden');
+        document.addEventListener('keydown', e => {
+            if (['1', '2', '3'].includes(e.key)) choosePick(Number(e.key) - 1);
+        });
+
+        // Highlight the card matching the fingers shown; pick it after holding PICK_HOLD
+        function updateFingerHold(dt) {
+            const n = pointer.active && performance.now() >= fingers.readyAt ? fingers.count : 0;
+            if (n >= 1 && n <= 3 && n === fingers.held) fingers.holdTime += dt;
+            else { fingers.held = n; fingers.holdTime = 0; }
+
+            [...choicesContainer.children].forEach((card, i) => {
+                const on = i === fingers.held - 1;
+                card.classList.toggle('is-hovered', on);
+                card.querySelector('.pick-progress').style.width = on ? Math.min(100, fingers.holdTime / PICK_HOLD * 100) + '%' : '0%';
+            });
+            if (fingers.holdTime >= PICK_HOLD) choosePick(fingers.held - 1);
         }
 
-        // What the pointer can select right now
-        function getTargets() {
-            if (isModalOpen()) return performance.now() >= gameState.modalReadyAt ? [modalBtn] : [];
-            if (gameState.isAnswering) return [];
-            return [...document.querySelectorAll('.choice-element')];
+        // ==========================================
+        // Turns
+        // ==========================================
+        const isOver = () => player.hp <= 0 || bot.hp <= 0;
+
+        async function startTurn(f) {
+            const before = [player.hp, bot.hp];
+            const line = tickPoison(f);
+            if (line) {
+                flashHits(before);
+                await announce(line, `${f.name} โดนพิษ`);
+            }
         }
 
+        async function playerTurn() {
+            setTurn('⚔️ ตาของคุณ: โจมตี');
+            await startTurn(player);
+            if (isOver()) return;
+
+            const q = mainQueue[stats.mainAsked++];
+            $('hud-main').innerText = stats.mainAsked;
+            const ok = await ask(q, MAIN_TIME, `ข้อหลัก ${stats.mainAsked}/20 · ตอบถูกได้เลือกอาวุธ`);
+            if (!ok) {
+                await announce('😢 เสียเทิร์น', 'เสียเทิร์น', 1200);
+                return;
+            }
+            stats.mainRight++;
+            const weapon = await pick(WEAPONS, 'เลือกอาวุธ');
+
+            setTurn('⚔️ ตาของคุณ: โจมตี');
+            await announce(`คุณเลือก ${weapon.icon} ${weapon.name}<br><span class="text-2xl text-gray-600">🤖 บอทกำลังตอบคำถามโบนัส...</span>`, `คุณเลือก${weapon.name}`, 1500);
+            const buff = Math.random() < BOT_BONUS_RATE ? randomItem(BUFFS) : null;
+            await announce(buff ? `🤖 บอทตอบถูก ใช้ ${buff.icon} ${buff.name}` : '🤖 บอทตอบโบนัสผิด ไม่ได้บัฟ', null, 1500);
+
+            const before = [player.hp, bot.hp];
+            const log = resolveAttack(player, bot, weapon, buff);
+            flashHits(before);
+            await announce(log.join('<br>'), null, 2200);
+        }
+
+        async function botTurn() {
+            setTurn('🛡️ ตาของบอท: ตั้งรับ');
+            await startTurn(bot);
+            if (isOver()) return;
+
+            await announce('🤖 บอทกำลังตอบคำถาม...', null, 1200);
+            if (Math.random() >= BOT_MAIN_RATE) {
+                await announce('🤖 บอทตอบผิด เสียเทิร์น!', 'บอทเสียเทิร์น', 1500);
+                return;
+            }
+            const weapon = randomItem(WEAPONS);
+            await announce(`🤖 บอทเลือก ${weapon.icon} ${weapon.name}!<br><span class="text-2xl text-gray-600">ตอบคำถามโบนัสเพื่อตั้งรับ</span>`, `บอทเลือก${weapon.name}`, 2000);
+
+            if (!bonusQueue.length) bonusQueue = shuffle([...BONUS_QUESTIONS]); // reuse once all 15 are used
+            stats.bonusAsked++;
+            const ok = await ask(bonusQueue.pop(), BONUS_TIME, `⚡ คำถามโบนัส · บอทใช้ ${weapon.icon} ${weapon.name}`);
+            let buff = null;
+            if (ok) {
+                stats.bonusRight++;
+                buff = await pick(BUFFS, 'เลือกบัฟตั้งรับ');
+                setTurn('🛡️ ตาของบอท: ตั้งรับ');
+            }
+
+            const before = [player.hp, bot.hp];
+            const log = resolveAttack(bot, player, weapon, buff);
+            flashHits(before);
+            await announce(log.join('<br>'), null, 2200);
+        }
+
+        async function runGame() {
+            $('screen-loading').classList.add('hidden');
+            $('screen-game').classList.remove('hidden');
+            mainQueue = shuffle([...MAIN_QUESTIONS]);
+            renderFighters();
+            await announce('⚔️ เริ่มการต่อสู้!<br><span class="text-2xl text-gray-600">คุณโจมตีก่อน</span>', 'เริ่มการต่อสู้', 2000);
+            while (true) {
+                await playerTurn();
+                if (isOver()) break;
+                await botTurn();
+                if (isOver() || stats.mainAsked >= MAIN_QUESTIONS.length) break;
+            }
+            endGame();
+        }
+
+        function endGame() {
+            $('screen-game').classList.add('hidden');
+            $('screen-game-over').classList.remove('hidden');
+            arPointer.style.display = 'none';
+            $('output_canvas').classList.add('hidden');
+
+            const won = player.hp > bot.hp, draw = player.hp === bot.hp;
+            $('final-title').innerText = draw ? '🤝 เสมอ!' : won ? '🏆 คุณชนะ!' : '🤖 บอทชนะ!';
+            $('final-title').className = `text-5xl font-extrabold mb-6 ${won ? 'text-green-600' : draw ? 'text-blue-600' : 'text-red-500'}`;
+            $('final-hp-player').innerText = player.hp;
+            $('final-hp-bot').innerText = bot.hp;
+            $('final-main').innerText = `${stats.mainRight}/${stats.mainAsked}`;
+            $('final-bonus').innerText = `${stats.bonusRight}/${stats.bonusAsked}`;
+            speak(draw ? 'เสมอ' : won ? 'คุณชนะ เก่งมาก' : 'บอทชนะ ลองใหม่นะ');
+        }
+
+        // ==========================================
+        // Initialization
+        // ==========================================
+        async function startGame(m) {
+            mode = m;
+            $('screen-menu').classList.add('hidden');
+            speak("เริ่มเกม พาวเวอร์แบทเทิล"); // Speak to unlock audio
+
+            if (mode === 'ar') {
+                $('screen-loading').classList.remove('hidden');
+                await setupMediaPipe();
+            } else {
+                runGame();
+            }
+        }
+
+        // ==========================================
+        // AR pointer: dwell on an answer to pick it
+        // ==========================================
         function setHoverTarget(el) {
             if (pointer.hoverTarget === el) return;
             if (pointer.hoverTarget) pointer.hoverTarget.classList.remove('is-hovered');
@@ -554,22 +520,21 @@
             let foundHover = null;
 
             if (pointer.active) {
-                // Update Visual Pointer
                 arPointer.style.display = 'block';
                 arPointer.style.left = `${pointer.x}px`;
                 arPointer.style.top = `${pointer.y}px`;
 
-                // Collision Detection
-                getTargets().forEach(el => {
-                    const rect = el.getBoundingClientRect();
-                    // Inflate hitbox slightly for easier playing
-                    const padding = 15;
-                    if (pointer.x >= rect.left - padding && pointer.x <= rect.right + padding &&
-                        pointer.y >= rect.top - padding && pointer.y <= rect.bottom + padding) {
-                        foundHover = el;
-                    }
-                });
-            } else if (gameState.mode === 'ar') {
+                if (answerResolve) {
+                    document.querySelectorAll('.choice-element').forEach(el => {
+                        const rect = el.getBoundingClientRect();
+                        const padding = 15; // easier to hit
+                        if (pointer.x >= rect.left - padding && pointer.x <= rect.right + padding &&
+                            pointer.y >= rect.top - padding && pointer.y <= rect.bottom + padding) {
+                            foundHover = el;
+                        }
+                    });
+                }
+            } else {
                 arPointer.style.display = 'none';
             }
 
@@ -577,166 +542,29 @@
 
             if (foundHover) {
                 pointer.hoverTime += deltaTime;
-
-                // Visual feedback for progress
                 const progress = Math.min((pointer.hoverTime / HOVER_THRESHOLD) * 360, 360);
                 arPointer.style.backgroundColor = 'rgba(34, 197, 94, 0.8)'; // Green when hovering
                 arPointerProgress.style.opacity = 1;
                 arPointerProgress.style.background = `conic-gradient(#22c55e ${progress}deg, rgba(255,255,255,0.5) 0)`;
-
-                if (pointer.hoverTime >= HOVER_THRESHOLD) {
-                    setHoverTarget(null);
-                    if (foundHover === modalBtn) handleModalButton();
-                    else submitAnswer(foundHover.dataset.answer);
-                }
+                if (pointer.hoverTime >= HOVER_THRESHOLD) submitAnswer(foundHover.dataset.answer);
             } else {
                 arPointer.style.backgroundColor = 'rgba(239, 68, 68, 0.7)'; // Red
                 arPointerProgress.style.opacity = 0;
             }
 
-            animationFrameId = requestAnimationFrame(gameLoop);
-        }
+            if (pickResolve) updateFingerHold(deltaTime);
 
-        // ==========================================
-        // Scoring & Feedback
-        // ==========================================
-        function submitAnswer(ans) {
-            if (gameState.isAnswering) return;
-            gameState.isAnswering = true;
-            stopTimer();
-
-            const q = gameState.currentQData;
-            const isCorrect = (ans === q.ans);
-
-            if (isCorrect) {
-                gameState.totalCorrect++;
-                gameState.totalAnswered++;
-                let points, bonus = 0;
-                if (gameState.attempt === 1) {
-                    gameState.firstTryCorrect++;
-                    gameState.streak++;
-                    points = 10;
-                    if (gameState.streak > 1) {
-                        bonus = 3 * (gameState.streak - 1); // +3 per consecutive after the first
-                    }
-                } else {
-                    points = 5; // correct on the second try
-                }
-                gameState.score += points + bonus;
-
-                showModal(
-                    "ถูกต้อง! 🎉",
-                    `ยอดเยี่ยมมาก!<br><span class="text-lg text-blue-600 font-bold">${q.exp}</span><br><span class="text-sm text-green-600 mt-2 block">+${points} คะแนน ${bonus > 0 ? '(โบนัสต่อเนื่อง +'+bonus+')' : ''}</span>`,
-                    true, 'next'
-                );
-                speak("ถูกต้องค่ะ " + q.exp);
-            } else if (gameState.attempt === 1) {
-                // First wrong answer: hint, then one more try without that choice
-                gameState.streak = 0;
-                gameState.attempt = 2;
-                gameState.wrongPicks.push(ans);
-                showModal(
-                    "เกือบถูกแล้ว! 😅",
-                    `คำใบ้: <span class="text-blue-600 font-bold">${q.hint}</span><br><span class="text-base text-gray-500 mt-2 block">ลองอีกครั้ง! ถ้าตอบถูกได้ 5 คะแนน</span>`,
-                    false, 'retry'
-                );
-                speak("ยังไม่ถูกค่ะ ลองฟังคำใบ้นะคะ " + q.hint);
-            } else {
-                gameState.totalAnswered++;
-                revealAnswer("ยังไม่ถูกนะ 😢", "ยังไม่ถูกค่ะ");
-            }
-            updateHUD();
-        }
-
-        function revealAnswer(title, spoken) {
-            const q = gameState.currentQData;
-            showModal(
-                title,
-                `คำตอบที่ถูกคือ <span class="text-green-600 font-extrabold">${q.ans}</span><br><span class="text-lg text-blue-600 font-bold">${q.exp}</span>`,
-                false, 'next'
-            );
-            speak(spoken + " คำตอบคือ " + q.exp);
-        }
-
-        function handleAnswerTimeout() {
-            gameState.isAnswering = true;
-            stopTimer();
-            gameState.totalAnswered++;
-            gameState.streak = 0;
-            revealAnswer("หมดเวลา! ⏰", "หมดเวลาค่ะ");
-            updateHUD();
-        }
-
-        function updateHUD() {
-            document.getElementById('hud-score').innerText = gameState.score;
-            document.getElementById('hud-accuracy').innerText = gameState.totalAnswered
-                ? Math.round((gameState.firstTryCorrect / gameState.totalAnswered) * 100) + '%'
-                : '-';
-
-            const streakC = document.getElementById('hud-streak-container');
-            if (gameState.streak > 1) {
-                streakC.classList.remove('hidden');
-                document.getElementById('hud-streak').innerText = gameState.streak;
-                document.getElementById('hud-bonus').innerText = 3 * (gameState.streak - 1);
-            } else {
-                streakC.classList.add('hidden');
-            }
-        }
-
-        function showModal(title, descHTML, isSuccess, action) {
-            const titleEl = document.getElementById('modal-title');
-            titleEl.innerText = title;
-            titleEl.className = `text-4xl font-extrabold mb-4 ${isSuccess ? 'text-green-600' : 'text-orange-500'}`;
-            document.getElementById('modal-desc').innerHTML = descHTML;
-
-            modalBtn.className = `w-full py-4 text-white text-2xl font-bold rounded-xl shadow-lg transition-colors ${isSuccess ? 'bg-green-500 hover:bg-green-600' : 'bg-orange-500 hover:bg-orange-600'}`;
-            modalBtn.innerText = action === 'retry' ? "ลองตอบอีกครั้ง" : (isSuccess ? "ไปข้อต่อไป" : "เข้าใจแล้ว ไปต่อ");
-
-            gameState.modalAction = action;
-            gameState.modalReadyAt = performance.now() + MODAL_READ_DELAY;
-            setHoverTarget(null);
-            modalEl.classList.remove('hidden');
-        }
-
-        function handleModalButton() {
-            if (!isModalOpen()) return;
-            modalEl.classList.add('hidden');
-            setHoverTarget(null);
-            if (gameState.modalAction === 'retry') {
-                gameState.qToken++; // cancel the pending "start timer after speech"
-                gameState.isAnswering = false;
-                renderChoices();
-                startTimer(RETRY_TIME);
-                speak("ลองใหม่อีกครั้งค่ะ");
-            } else {
-                gameState.qIndex++;
-                loadQuestion();
-            }
-        }
-
-        function endGame() {
-            cancelAnimationFrame(animationFrameId);
-            stopTimer();
-            document.getElementById('screen-game').classList.add('hidden');
-            document.getElementById('screen-game-over').classList.remove('hidden');
-            arPointer.style.display = 'none';
-
-            document.getElementById('final-score').innerText = gameState.score;
-            document.getElementById('final-correct').innerText = gameState.totalCorrect;
-            document.getElementById('final-accuracy').innerText = Math.round((gameState.firstTryCorrect / 15) * 100) + '%';
-
-            speak("จบเกมแล้วค่ะ เก่งมากๆ เลย");
+            requestAnimationFrame(gameLoop);
         }
 
         // ==========================================
         // MediaPipe Integration
         // ==========================================
         async function setupMediaPipe() {
-            const videoElement = document.getElementById('input_video');
-            const canvasElement = document.getElementById('output_canvas');
+            const videoElement = $('input_video');
+            const canvasElement = $('output_canvas');
             const canvasCtx = canvasElement.getContext('2d');
 
-            // Show canvas for drawing landmarks
             canvasElement.classList.remove('hidden');
             videoElement.classList.remove('hidden');
 
@@ -772,8 +600,7 @@
             });
 
             hands.onResults((results) => {
-                // Only process if AR mode and game active
-                if (gameState.mode !== 'ar' || document.getElementById('screen-game').classList.contains('hidden')) return;
+                if ($('screen-game').classList.contains('hidden')) return;
 
                 canvasCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
@@ -796,6 +623,12 @@
                         canvasCtx.fill();
                     });
 
+                    // Count raised fingers (index, middle, ring, pinky; thumb ignored):
+                    // a raised finger's tip is clearly farther from the wrist (0) than its middle joint
+                    const dist = (a, b) => Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y);
+                    fingers.count = [[8, 6], [12, 10], [16, 14], [20, 18]]
+                        .filter(([tip, pip]) => dist(tip, 0) > dist(pip, 0) * FINGER_RATIO).length;
+
                     // Index Finger Tip is Landmark 8; smooth out jitter (jump straight there when the hand reappears)
                     // ponytail: fixed-weight smoothing lags a little on fast moves, One Euro filter if that bothers players
                     const k = pointer.active ? 0.5 : 1;
@@ -817,7 +650,8 @@
 
             try {
                 await camera.start();
-                startLevel(1);
+                gameLoop();
+                runGame();
             } catch (err) {
                 alert("ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตใช้งานกล้อง หรือเปลี่ยนไปเล่นโหมดเมาส์");
                 console.error(err);
