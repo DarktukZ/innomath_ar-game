@@ -4,18 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Power Catch AR - เกมคณิตศาสตร์เลขยกกำลัง</title>
-    
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Google Fonts for Readable Thai Text -->
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;800&display=swap" rel="stylesheet">
-    
-    <!-- MediaPipe Hands -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <!-- MediaPipe Hands (pinned versions so a new release can't break the game) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
 
     <style>
         body {
@@ -24,7 +22,7 @@
             touch-action: none;
             background-color: #f0fdf4; /* Light green background */
         }
-        
+
         /* Custom Pointer */
         #ar-pointer {
             position: fixed;
@@ -41,40 +39,41 @@
             transition: background-color 0.1s;
         }
 
+        /* Dwell progress ring: filled by a conic gradient set from JS */
         #ar-pointer-progress {
             position: absolute;
-            top: -6px; left: -6px; right: -6px; bottom: -6px;
+            top: -10px; left: -10px; right: -10px; bottom: -10px;
             border-radius: 50%;
-            border: 4px solid transparent;
-            border-top-color: #22c55e; /* Green progress */
-            transform: rotate(0deg);
+            -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
             opacity: 0;
         }
 
         /* Animations for Levels */
+        /* Level 1 bounces back and forth inside the screen, so answers never disappear off-screen */
         @keyframes moveLeftRight {
-            0% { left: -20%; }
-            100% { left: 120%; }
+            0% { left: 2%; }
+            100% { left: calc(98% - 170px); }
         }
 
         @keyframes floatUp {
-            0% { bottom: -20%; transform: translateX(0) rotate(-5deg); }
+            0% { bottom: -25%; transform: translateX(0) rotate(-5deg); }
             50% { transform: translateX(30px) rotate(5deg); }
-            100% { bottom: 120%; transform: translateX(-20px) rotate(-2deg); }
+            100% { bottom: 110%; transform: translateX(-20px) rotate(-2deg); }
         }
 
         /* Level 1: Moving Option */
         .level1-option {
             position: absolute;
-            animation: moveLeftRight 8s linear infinite;
-            min-width: 120px;
+            width: 170px;
+            animation: moveLeftRight 14s ease-in-out infinite alternate;
             text-align: center;
         }
 
         /* Level 2: Balloon Option */
         .level2-option {
             position: absolute;
-            animation: floatUp 10s ease-in-infinite;
+            animation: floatUp 14s linear infinite;
             width: 100px;
             height: 120px;
             background: radial-gradient(circle at 30% 30%, #ff8a00, #e52e71);
@@ -86,7 +85,7 @@
             font-weight: bold;
             box-shadow: inset -5px -5px 10px rgba(0,0,0,0.2), 0 5px 15px rgba(0,0,0,0.3);
         }
-        
+
         .level2-option::after {
             content: "";
             position: absolute;
@@ -101,7 +100,14 @@
         .level3-option {
             transition: transform 0.2s;
         }
-        .level3-option:hover {
+
+        /* Pointer is on this target: freeze it so it can be selected, and highlight it */
+        .is-hovered {
+            animation-play-state: paused !important;
+            outline: 5px solid #22c55e;
+            outline-offset: 4px;
+        }
+        .level3-option.is-hovered {
             transform: scale(1.05);
         }
 
@@ -128,16 +134,17 @@
 
     <!-- Background Camera Video -->
     <video id="input_video" class="video-feed hidden" autoplay playsinline></video>
-    <canvas id="output_canvas" class="absolute top-0 left-0 w-full h-full z-[-1] pointer-events-none hidden"></canvas>
+    <!-- Above the game screen (z-10) so answer boxes never hide the hand, below the modal (z-50) -->
+    <canvas id="output_canvas" class="absolute top-0 left-0 w-full h-full z-20 pointer-events-none hidden"></canvas>
 
     <!-- UI Container -->
     <div id="app-container" class="relative w-full h-full flex flex-col items-center justify-center">
-        
+
         <!-- Screen 1: Main Menu -->
         <div id="screen-menu" class="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-8 text-center m-4 z-10">
             <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mb-4 tracking-wider">POWER CATCH AR</h1>
             <p class="text-xl text-gray-600 mb-8 font-semibold">เกมฝึกทักษะคณิตศาสตร์: เลขยกกำลัง</p>
-            
+
             <div class="space-y-4">
                 <button onclick="startGame('ar')" class="w-full py-4 px-6 bg-gradient-to-r from-green-400 to-green-600 text-white text-2xl font-bold rounded-xl shadow-lg hover:scale-105 transition-transform">
                     📸 เล่นโหมดกล้อง (AR)
@@ -146,9 +153,9 @@
                     🖱️ เล่นโหมดเมาส์ / สัมผัส
                 </button>
             </div>
-            
+
             <div class="mt-6 text-sm text-gray-500 text-left bg-gray-100 p-4 rounded-lg">
-                <p><strong>วิธีการเล่นโหมด AR:</strong> ชูมือขึ้นหน้ากล้อง ใช้นิ้วชี้เล็งไปที่คำตอบที่ถูกต้องค้างไว้ 0.3 วินาที!</p>
+                <p><strong>วิธีการเล่นโหมด AR:</strong> ชูมือขึ้นหน้ากล้อง ใช้นิ้วชี้เล็งไปที่คำตอบ แล้วค้างไว้จนวงสีเขียวครบรอบ (ประมาณ 1 วินาที) ปุ่ม "ไปต่อ" ก็ใช้นิ้วชี้ค้างไว้แบบเดียวกัน</p>
             </div>
         </div>
 
@@ -160,16 +167,16 @@
 
         <!-- Screen 3: Game -->
         <div id="screen-game" class="hidden w-full h-full flex flex-col z-10 relative">
-            
+
             <!-- HUD -->
             <div class="w-full p-4 flex justify-between items-start">
                 <div class="bg-white/90 backdrop-blur-sm rounded-2xl p-3 shadow-lg border-2 border-blue-200">
                     <p class="text-lg font-bold text-gray-600">ด่าน: <span id="hud-level" class="text-blue-600 text-2xl">1</span></p>
                     <p class="text-lg font-bold text-gray-600">ข้อ: <span id="hud-qnum" class="text-blue-600 text-2xl">1</span>/5</p>
                 </div>
-                
+
                 <div class="flex flex-col items-center">
-                    <div class="bg-white/90 backdrop-blur-sm rounded-full w-24 h-24 flex items-center justify-center shadow-lg border-4 border-red-400">
+                    <div id="hud-time-box" class="bg-white/90 backdrop-blur-sm rounded-full w-24 h-24 flex items-center justify-center shadow-lg border-4 border-red-400">
                         <span id="hud-time" class="text-4xl font-extrabold text-red-500">20</span>
                     </div>
                 </div>
@@ -177,7 +184,7 @@
                 <div class="bg-white/90 backdrop-blur-sm rounded-2xl p-3 shadow-lg border-2 border-green-200 text-right">
                     <p class="text-lg font-bold text-gray-600">คะแนน: <span id="hud-score" class="text-green-600 text-2xl">0</span></p>
                     <p id="hud-streak-container" class="text-sm font-bold text-orange-500 hidden mt-1">🔥 ต่อเนื่อง x<span id="hud-streak">0</span> (+<span id="hud-bonus">0</span>)</p>
-                    <p class="text-sm font-bold text-gray-500 mt-1">ความถูกต้อง: <span id="hud-accuracy">100%</span></p>
+                    <p class="text-sm font-bold text-gray-500 mt-1">ถูกครั้งแรก: <span id="hud-accuracy">-</span></p>
                 </div>
             </div>
 
@@ -192,6 +199,15 @@
             <div id="choices-container" class="flex-grow relative w-full h-full overflow-hidden mt-4">
                 <!-- Choices injected here -->
             </div>
+
+            <!-- Level Intro Overlay -->
+            <div id="level-intro" class="hidden absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-lg w-full text-center">
+                    <div id="level-intro-icon" class="text-7xl mb-4">➡️</div>
+                    <h2 id="level-intro-title" class="text-4xl font-extrabold text-blue-600 mb-3">ด่าน 1</h2>
+                    <p id="level-intro-desc" class="text-2xl text-gray-700 font-medium">รายละเอียด</p>
+                </div>
+            </div>
         </div>
 
         <!-- Modal (Feedback) -->
@@ -199,7 +215,7 @@
             <div id="modal-content" class="bg-white rounded-3xl shadow-2xl p-8 max-w-lg w-full text-center transform scale-95 transition-transform duration-300">
                 <h3 id="modal-title" class="text-4xl font-extrabold mb-4">สถานะ</h3>
                 <p id="modal-desc" class="text-2xl text-gray-700 mb-8 font-medium">รายละเอียด</p>
-                <button id="modal-btn" onclick="nextQuestion()" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white text-2xl font-bold rounded-xl shadow-lg transition-colors">
+                <button id="modal-btn" onclick="handleModalButton()" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white text-2xl font-bold rounded-xl shadow-lg transition-colors">
                     ไปต่อ
                 </button>
             </div>
@@ -210,13 +226,13 @@
             <div class="absolute -top-10 -left-10 text-9xl opacity-20">🎉</div>
             <div class="absolute -bottom-10 -right-10 text-9xl opacity-20">🏆</div>
             <h1 class="text-5xl font-extrabold text-green-600 mb-6 relative z-10">สรุปผลการเรียน!</h1>
-            
+
             <div class="space-y-4 mb-8 relative z-10 bg-blue-50 p-6 rounded-2xl border-2 border-blue-200">
                 <p class="text-3xl font-bold text-gray-800">คะแนนรวม: <span id="final-score" class="text-blue-600">0</span></p>
                 <p class="text-2xl font-bold text-gray-700">ตอบถูก: <span id="final-correct">0</span> / 15</p>
-                <p class="text-2xl font-bold text-gray-700">ความแม่นยำ: <span id="final-accuracy">0%</span></p>
+                <p class="text-2xl font-bold text-gray-700">ถูกตั้งแต่ครั้งแรก: <span id="final-accuracy">0%</span></p>
             </div>
-            
+
             <button onclick="location.reload()" class="w-full py-4 px-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-2xl font-bold rounded-xl shadow-lg hover:scale-105 transition-transform relative z-10">
                 🔄 เล่นอีกครั้ง
             </button>
@@ -239,7 +255,7 @@
             ],
             2: [ // ด่าน 2: สมบัติเลขยกกำลัง (ลูกโป่งลอย)
                 { q: "2³ × 2⁴ มีค่าเท่าใด?", options: ["2⁷", "2¹²", "4⁷"], ans: "2⁷", hint: "ฐานเหมือนกันคูณกัน ให้นำเลขชี้กำลังมาบวกกัน", exp: "2³ × 2⁴ = 2⁽³⁺⁴⁾ = 2⁷" },
-                { q: "5⁶ ÷ 5² มีค่าเท่าใด?", options: ["5⁴", "5³", "1⁴"], ans: "5⁴", hint: "ฐานเหมือนกันหารกัน ให้นำเลขชี้กำลังมาลบกัน", exp: "5⁶ ÷ 5² = 5⁽⁶⁻²⁾ = 5⁴" },
+                { q: "5⁶ ÷ 5² มีค่าเท่าใด?", options: ["5⁴", "5³", "5⁸"], ans: "5⁴", hint: "ฐานเหมือนกันหารกัน ให้นำเลขชี้กำลังมาลบกัน", exp: "5⁶ ÷ 5² = 5⁽⁶⁻²⁾ = 5⁴" },
                 { q: "(3²)³ มีค่าเท่าใด?", options: ["3⁶", "3⁵", "9³"], ans: "3⁶", hint: "กำลังซ้อนกัน ให้นำเลขชี้กำลังมาคูณกัน", exp: "(3²)³ = 3⁽²ˣ³⁾ = 3⁶" },
                 { q: "2² × 3² มีค่าเท่าใด?", options: ["6²", "5²", "6⁴"], ans: "6²", hint: "เลขชี้กำลังเหมือนกัน นำฐานมาคูณกันก่อนได้", exp: "2² × 3² = (2 × 3)² = 6²" },
                 { q: "a³ × a⁵ มีค่าเท่าใด?", options: ["a⁸", "a¹⁵", "a²"], ans: "a⁸", hint: "คูณกัน ฐานเหมือนกัน จับเลขชี้กำลังรวมกัน", exp: "a³ × a⁵ = a⁽³⁺⁵⁾ = a⁸" },
@@ -248,12 +264,22 @@
             3: [ // ด่าน 3: โจทย์ปัญหา (กล่องอยู่นิ่ง)
                 { q: "แบคทีเรียแบ่งตัวเป็น 2 เท่าทุกๆ ชั่วโมง ผ่านไป 3 ชม. จะมีกี่เซลล์ (เริ่ม 1 เซลล์)?", options: ["8", "6", "9"], ans: "8", hint: "ลองคำนวณ 2 ยกกำลัง 3 ดูสิ", exp: "1 × 2³ = 1 × 8 = 8 เซลล์" },
                 { q: "กล่องลูกบาศก์มีด้านยาว 4 ซม. จะมีปริมาตรเท่าใด?", options: ["64", "16", "12"], ans: "64", hint: "ปริมาตรลูกบาศก์ = ด้าน × ด้าน × ด้าน", exp: "4³ = 4 × 4 × 4 = 64 ลบ.ซม." },
-                { q: "พื้นที่ 100 ตร.ม. ของรูปสี่เหลี่ยมจัตุรัส ด้านแต่ละด้านยาวเท่าใด?", options: ["10", "50", "25"], ans: "10", hint: "เลขอะไรเอ่ยคูณตัวเองแล้วได้ 100?", exp: "ด้าน² = 100 ดังนั้น ด้าน = 10 ม. (เพราะ 10² = 100)" },
-                { q: "ไวรัส 10 ตัว ขยายพันธุ์ตัวละ 10² ตัว รวมมีไวรัสกี่ตัว?", options: ["1000", "100", "20"], ans: "1000", hint: "10 คูณกับ 10² ได้เท่าไหร่ (ฐาน 10 เหมือนกัน)", exp: "10¹ × 10² = 10³ = 1000 ตัว" },
+                { q: "พื้นที่ 100 ตร.ม. ของรูปสี่เหลี่ยมจัตุรัส ด้านแต่ละด้านยาวเท่าใด?", options: ["10", "50", "25"], ans: "10", hint: "พื้นที่จัตุรัส = ด้าน × ด้าน ลองเอาแต่ละตัวเลือกมายกกำลังสองดู", exp: "ด้าน² = 100 ดังนั้น ด้าน = 10 ม. (เพราะ 10² = 100)" },
+                { q: "มีกล่อง 10 กล่อง แต่ละกล่องมีลูกแก้ว 10² ลูก รวมมีลูกแก้วกี่ลูก?", options: ["1000", "100", "20"], ans: "1000", hint: "10 × 10² ฐานเหมือนกัน นำเลขชี้กำลังมาบวกกัน", exp: "10¹ × 10² = 10³ = 1000 ลูก" },
                 { q: "คอมพิวเตอร์มีความจุ 2¹⁰ ไบต์ มีค่าเท่ากับกี่ไบต์?", options: ["1024", "1000", "2048"], ans: "1024", hint: "2 คูณกัน 10 ครั้ง มีค่าเกินพันนิดๆ", exp: "2¹⁰ = 1024 ไบต์" },
                 { q: "กระดาษหนา 0.1 มม. พับครึ่ง 3 ครั้ง จะหนาเท่าไหร่?", options: ["0.8", "0.6", "0.4"], ans: "0.8", hint: "พับ 1 ครั้งหนา 2 เท่า (ใช้ 2³)", exp: "0.1 × 2³ = 0.1 × 8 = 0.8 มม." }
             ]
         };
+
+        const LEVEL_INFO = {
+            1: { icon: "➡️", title: "ด่าน 1: หาค่าเลขยกกำลัง", desc: "คำตอบจะเลื่อนไปมาซ้าย-ขวา ชี้ค้างไว้แล้วคำตอบจะหยุดให้" },
+            2: { icon: "🎈", title: "ด่าน 2: สมบัติเลขยกกำลัง", desc: "คำตอบอยู่บนลูกโป่งที่ลอยขึ้น ชี้ค้างไว้ให้ทัน!" },
+            3: { icon: "📦", title: "ด่าน 3: โจทย์ปัญหา", desc: "คำตอบอยู่นิ่ง มีเวลาคิด 30 วินาที" }
+        };
+        const QUESTION_TIME = { 1: 20, 2: 20, 3: 30 };
+        const RETRY_TIME = 10;          // seconds for the second try after a wrong answer
+        const MODAL_READ_DELAY = 1200;  // ms before the modal button accepts a dwell, so players read first
+        const LEVEL_INTRO_TIME = 3500;  // ms
 
         // ==========================================
         // Game State
@@ -264,18 +290,24 @@
             qIndex: 0,
             score: 0,
             streak: 0,
-            totalCorrect: 0,
-            totalAnswered: 0,
+            totalCorrect: 0,      // correct on either try
+            firstTryCorrect: 0,
+            totalAnswered: 0,     // questions finished
+            attempt: 1,
+            wrongPicks: [],
             timeLeft: 20,
             timerInterval: null,
+            qToken: 0,            // invalidates stale speech callbacks
             currentQuestions: [],
             currentQData: null,
             isAnswering: false,
+            modalAction: 'next',  // 'next' | 'retry'
+            modalReadyAt: 0,
         };
 
         // Pointer state for interaction
         let pointer = { x: -100, y: -100, active: false, hoverTarget: null, hoverTime: 0 };
-        const HOVER_THRESHOLD = 300; // ms required to select an answer
+        const HOVER_THRESHOLD = 900; // ms required to select an answer
         let lastFrameTime = performance.now();
         let animationFrameId;
 
@@ -283,6 +315,8 @@
         const arPointer = document.getElementById('ar-pointer');
         const arPointerProgress = document.getElementById('ar-pointer-progress');
         const choicesContainer = document.getElementById('choices-container');
+        const modalEl = document.getElementById('modal-feedback');
+        const modalBtn = document.getElementById('modal-btn');
 
         // ==========================================
         // Utility Functions
@@ -295,13 +329,24 @@
             return array;
         }
 
-        function speak(text) {
+        // onEnd fires once: when speech finishes, or after an estimated duration
+        // (some browsers have no Thai voice or never fire onend)
+        function speak(text, onEnd) {
+            let done = false;
+            const finish = () => {
+                if (done) return;
+                done = true;
+                if (onEnd) onEnd();
+            };
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
                 const msg = new SpeechSynthesisUtterance(text);
                 msg.lang = 'th-TH';
+                msg.onend = finish;
+                msg.onerror = finish;
                 window.speechSynthesis.speak(msg);
             }
+            if (onEnd) setTimeout(finish, Math.min(8000, 1500 + text.length * 90));
         }
 
         // ==========================================
@@ -310,7 +355,7 @@
         async function startGame(mode) {
             gameState.mode = mode;
             document.getElementById('screen-menu').classList.add('hidden');
-            
+
             // Speak to unlock audio context
             speak("เริ่มเกม พาวเวอร์แคช เออาร์");
 
@@ -318,6 +363,9 @@
                 document.getElementById('screen-loading').classList.remove('hidden');
                 await setupMediaPipe();
             } else {
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('touchstart', handleTouchMove, {passive: true});
+                document.addEventListener('touchmove', handleTouchMove, {passive: true});
                 startLevel(1);
             }
         }
@@ -327,23 +375,34 @@
             gameState.qIndex = 0;
             // Get 5 random questions for this level
             gameState.currentQuestions = shuffle([...questionsDB[level]]).slice(0, 5);
-            
+
             document.getElementById('screen-loading').classList.add('hidden');
             document.getElementById('screen-game').classList.remove('hidden');
-            
+
             // Setup Interaction Loop
             lastFrameTime = performance.now();
             if(!animationFrameId) gameLoop();
-            
-            if (gameState.mode === 'mouse') {
-                document.addEventListener('mousemove', handleMouseMove);
-                document.addEventListener('touchmove', handleTouchMove, {passive: false});
-                arPointer.style.display = 'block';
-            } else {
-                arPointer.style.display = 'block';
-            }
 
-            loadQuestion();
+            // Level intro: tell the player what changes in this level, then start automatically
+            gameState.isAnswering = true;
+            choicesContainer.innerHTML = '';
+            document.getElementById('hud-level').innerText = level;
+            document.getElementById('hud-qnum').innerText = 1;
+            document.getElementById('question-text').innerText = LEVEL_INFO[level].title;
+            document.getElementById('hud-time').innerText = QUESTION_TIME[level];
+
+            const info = LEVEL_INFO[level];
+            document.getElementById('level-intro-icon').innerText = info.icon;
+            document.getElementById('level-intro-title').innerText = info.title;
+            document.getElementById('level-intro-desc').innerText = info.desc;
+            const intro = document.getElementById('level-intro');
+            intro.classList.remove('hidden');
+            speak(info.title + " " + info.desc);
+
+            setTimeout(() => {
+                intro.classList.add('hidden');
+                loadQuestion();
+            }, LEVEL_INTRO_TIME);
         }
 
         function loadQuestion() {
@@ -358,23 +417,32 @@
             }
 
             gameState.isAnswering = false;
+            gameState.attempt = 1;
+            gameState.wrongPicks = [];
             gameState.currentQData = gameState.currentQuestions[gameState.qIndex];
-            
+
             // Update HUD
             document.getElementById('hud-level').innerText = gameState.level;
             document.getElementById('hud-qnum').innerText = gameState.qIndex + 1;
             document.getElementById('question-text').innerText = gameState.currentQData.q;
-            
-            // Speak question
-            speak(gameState.currentQData.q);
 
-            // Render Choices
+            // Render Choices (answering early is allowed)
             renderChoices();
 
-            // Reset and start Timer
-            gameState.timeLeft = 20;
+            // The clock starts only after the question has been read aloud
+            stopTimer();
+            gameState.timeLeft = QUESTION_TIME[gameState.level];
             updateTimerDisplay();
-            clearInterval(gameState.timerInterval);
+            const token = ++gameState.qToken;
+            speak(gameState.currentQData.q, () => {
+                if (token === gameState.qToken && !gameState.isAnswering) startTimer(QUESTION_TIME[gameState.level]);
+            });
+        }
+
+        function startTimer(seconds) {
+            stopTimer();
+            gameState.timeLeft = seconds;
+            updateTimerDisplay();
             gameState.timerInterval = setInterval(() => {
                 if(!gameState.isAnswering) {
                     gameState.timeLeft--;
@@ -386,52 +454,62 @@
             }, 1000);
         }
 
+        function stopTimer() {
+            clearInterval(gameState.timerInterval);
+            gameState.timerInterval = null;
+        }
+
         function renderChoices() {
             choicesContainer.innerHTML = '';
-            const opts = shuffle([...gameState.currentQData.options]);
-            
+            const opts = shuffle(gameState.currentQData.options.filter(o => !gameState.wrongPicks.includes(o)));
+
+            // Level 3 boxes sit in a responsive row instead of fixed percentages
+            let parent = choicesContainer;
+            if (gameState.level === 3) {
+                parent = document.createElement('div');
+                parent.className = 'absolute inset-0 flex items-center justify-center gap-3 md:gap-6 px-4';
+                choicesContainer.appendChild(parent);
+            }
+
             opts.forEach((opt, idx) => {
                 const el = document.createElement('div');
                 el.innerText = opt;
-                el.className = 'choice-element absolute flex items-center justify-center cursor-pointer select-none';
+                el.className = 'choice-element flex items-center justify-center cursor-pointer select-none';
                 el.dataset.answer = opt;
 
                 if (gameState.level === 1) {
-                    // Moving Left to Right
-                    el.classList.add('level1-option', 'bg-gradient-to-r', 'from-blue-400', 'to-indigo-500', 'text-white', 'text-4xl', 'font-bold', 'py-4', 'px-8', 'rounded-2xl', 'shadow-xl');
-                    el.style.top = `${20 + (idx * 25)}%`;
-                    el.style.animationDuration = `${8 + (idx * 2)}s`; // Stagger speeds
-                    el.style.animationDelay = `-${idx * 2.5}s`;
+                    // Moving back and forth, always on screen
+                    el.classList.add('level1-option', 'bg-gradient-to-r', 'from-blue-400', 'to-indigo-500', 'text-white', 'text-3xl', 'md:text-4xl', 'font-bold', 'py-4', 'px-4', 'rounded-2xl', 'shadow-xl');
+                    const duration = 14 + idx * 3;
+                    el.style.top = `${12 + (idx * 28)}%`;
+                    el.style.animationDuration = `${duration}s`; // Stagger speeds
+                    el.style.animationDelay = `-${idx * duration * 0.6}s`;
                 } else if (gameState.level === 2) {
                     // Floating Balloons
                     el.classList.add('level2-option', 'text-4xl');
-                    el.style.left = `${15 + (idx * 30)}%`;
-                    el.style.animationDuration = `${9 + (idx * 1.5)}s`;
-                    el.style.animationDelay = `-${idx * 3}s`;
+                    const duration = 14 + idx * 2;
+                    el.style.left = `calc(${(idx + 0.5) * 33.33}% - 50px)`;
+                    el.style.animationDuration = `${duration}s`;
+                    el.style.animationDelay = `-${3 + idx * duration / 3}s`;
                 } else {
-                    // Stationary Boxes Grid
-                    el.classList.add('level3-option', 'bg-white', 'border-4', 'border-blue-400', 'text-blue-700', 'text-5xl', 'font-bold', 'p-8', 'rounded-3xl', 'shadow-lg');
-                    // Setup absolute position as a grid
-                    const leftPos = [10, 40, 70];
-                    el.style.left = `${leftPos[idx]}%`;
-                    el.style.top = `40%`;
-                    el.style.width = '20%';
+                    // Stationary Boxes Row
+                    el.classList.add('level3-option', 'flex-1', 'max-w-xs', 'bg-white', 'border-4', 'border-blue-400', 'text-blue-700', 'text-4xl', 'md:text-5xl', 'font-bold', 'py-10', 'px-2', 'rounded-3xl', 'shadow-lg');
                 }
-                
-                // Allow direct clicking for mouse mode fallback
+
+                // Allow direct clicking/tapping in mouse mode
                 el.onclick = () => {
                     if(!gameState.isAnswering && gameState.mode === 'mouse') submitAnswer(opt);
                 };
 
-                choicesContainer.appendChild(el);
+                parent.appendChild(el);
             });
         }
 
         function updateTimerDisplay() {
-            const tEl = document.getElementById('hud-time');
-            tEl.innerText = gameState.timeLeft;
-            if (gameState.timeLeft <= 5) tEl.classList.add('animate-ping');
-            else tEl.classList.remove('animate-ping');
+            document.getElementById('hud-time').innerText = gameState.timeLeft;
+            const box = document.getElementById('hud-time-box');
+            if (gameState.timerInterval && gameState.timeLeft <= 5) box.classList.add('animate-pulse', 'bg-red-100');
+            else box.classList.remove('animate-pulse', 'bg-red-100');
         }
 
         // ==========================================
@@ -444,10 +522,28 @@
         }
 
         function handleTouchMove(e) {
-            // e.preventDefault();
             pointer.x = e.touches[0].clientX;
             pointer.y = e.touches[0].clientY;
             pointer.active = true;
+        }
+
+        function isModalOpen() {
+            return !modalEl.classList.contains('hidden');
+        }
+
+        // What the pointer can select right now
+        function getTargets() {
+            if (isModalOpen()) return performance.now() >= gameState.modalReadyAt ? [modalBtn] : [];
+            if (gameState.isAnswering) return [];
+            return [...document.querySelectorAll('.choice-element')];
+        }
+
+        function setHoverTarget(el) {
+            if (pointer.hoverTarget === el) return;
+            if (pointer.hoverTarget) pointer.hoverTarget.classList.remove('is-hovered');
+            pointer.hoverTarget = el;
+            pointer.hoverTime = 0;
+            if (el) el.classList.add('is-hovered');
         }
 
         function gameLoop() {
@@ -455,47 +551,47 @@
             const deltaTime = currentTime - lastFrameTime;
             lastFrameTime = currentTime;
 
-            if (pointer.active && !gameState.isAnswering) {
+            let foundHover = null;
+
+            if (pointer.active) {
                 // Update Visual Pointer
+                arPointer.style.display = 'block';
                 arPointer.style.left = `${pointer.x}px`;
                 arPointer.style.top = `${pointer.y}px`;
 
                 // Collision Detection
-                const elements = document.querySelectorAll('.choice-element');
-                let foundHover = null;
-
-                elements.forEach(el => {
+                getTargets().forEach(el => {
                     const rect = el.getBoundingClientRect();
                     // Inflate hitbox slightly for easier playing
-                    const padding = 20; 
+                    const padding = 15;
                     if (pointer.x >= rect.left - padding && pointer.x <= rect.right + padding &&
                         pointer.y >= rect.top - padding && pointer.y <= rect.bottom + padding) {
                         foundHover = el;
                     }
                 });
+            } else if (gameState.mode === 'ar') {
+                arPointer.style.display = 'none';
+            }
 
-                if (foundHover) {
-                    pointer.hoverTarget = foundHover;
-                    pointer.hoverTime += deltaTime;
-                    
-                    // Visual feedback for progress
-                    let progress = Math.min((pointer.hoverTime / HOVER_THRESHOLD) * 360, 360);
-                    arPointer.style.backgroundColor = 'rgba(34, 197, 94, 0.8)'; // Green when hovering
-                    arPointerProgress.style.opacity = 1;
-                    arPointerProgress.style.transform = `rotate(${progress}deg)`;
+            setHoverTarget(foundHover);
 
-                    if (pointer.hoverTime >= HOVER_THRESHOLD) {
-                        submitAnswer(foundHover.dataset.answer);
-                        pointer.hoverTime = 0;
-                    }
-                } else {
-                    pointer.hoverTarget = null;
-                    pointer.hoverTime = 0;
-                    arPointer.style.backgroundColor = 'rgba(239, 68, 68, 0.7)'; // Red
-                    arPointerProgress.style.opacity = 0;
+            if (foundHover) {
+                pointer.hoverTime += deltaTime;
+
+                // Visual feedback for progress
+                const progress = Math.min((pointer.hoverTime / HOVER_THRESHOLD) * 360, 360);
+                arPointer.style.backgroundColor = 'rgba(34, 197, 94, 0.8)'; // Green when hovering
+                arPointerProgress.style.opacity = 1;
+                arPointerProgress.style.background = `conic-gradient(#22c55e ${progress}deg, rgba(255,255,255,0.5) 0)`;
+
+                if (pointer.hoverTime >= HOVER_THRESHOLD) {
+                    setHoverTarget(null);
+                    if (foundHover === modalBtn) handleModalButton();
+                    else submitAnswer(foundHover.dataset.answer);
                 }
             } else {
-                 arPointerProgress.style.opacity = 0;
+                arPointer.style.backgroundColor = 'rgba(239, 68, 68, 0.7)'; // Red
+                arPointerProgress.style.opacity = 0;
             }
 
             animationFrameId = requestAnimationFrame(gameLoop);
@@ -507,53 +603,76 @@
         function submitAnswer(ans) {
             if (gameState.isAnswering) return;
             gameState.isAnswering = true;
-            clearInterval(gameState.timerInterval);
-            
-            gameState.totalAnswered++;
-            const isCorrect = (ans === gameState.currentQData.ans);
+            stopTimer();
+
+            const q = gameState.currentQData;
+            const isCorrect = (ans === q.ans);
 
             if (isCorrect) {
-                gameState.streak++;
                 gameState.totalCorrect++;
-                let points = 10;
-                let bonus = 0;
-                if (gameState.streak > 1) {
-                    bonus = 3 * (gameState.streak - 1); // +3 per consecutive after the first
-                    points += bonus;
+                gameState.totalAnswered++;
+                let points, bonus = 0;
+                if (gameState.attempt === 1) {
+                    gameState.firstTryCorrect++;
+                    gameState.streak++;
+                    points = 10;
+                    if (gameState.streak > 1) {
+                        bonus = 3 * (gameState.streak - 1); // +3 per consecutive after the first
+                    }
+                } else {
+                    points = 5; // correct on the second try
                 }
-                gameState.score += points;
-                
+                gameState.score += points + bonus;
+
                 showModal(
-                    "ถูกต้อง! 🎉", 
-                    `ยอดเยี่ยมมาก!<br><span class="text-lg text-blue-600 font-bold">${gameState.currentQData.exp}</span><br><span class="text-sm text-green-600 mt-2 block">+10 คะแนน ${bonus > 0 ? '(โบนัสต่อเนื่อง +'+bonus+')' : ''}</span>`, 
-                    true
+                    "ถูกต้อง! 🎉",
+                    `ยอดเยี่ยมมาก!<br><span class="text-lg text-blue-600 font-bold">${q.exp}</span><br><span class="text-sm text-green-600 mt-2 block">+${points} คะแนน ${bonus > 0 ? '(โบนัสต่อเนื่อง +'+bonus+')' : ''}</span>`,
+                    true, 'next'
                 );
-                speak("ถูกต้องค่ะ " + gameState.currentQData.exp);
-            } else {
+                speak("ถูกต้องค่ะ " + q.exp);
+            } else if (gameState.attempt === 1) {
+                // First wrong answer: hint, then one more try without that choice
                 gameState.streak = 0;
+                gameState.attempt = 2;
+                gameState.wrongPicks.push(ans);
                 showModal(
-                    "เกือบถูกแล้ว! 😅", 
-                    `คำใบ้: <span class="text-blue-600 font-bold">${gameState.currentQData.hint}</span>`, 
-                    false
+                    "เกือบถูกแล้ว! 😅",
+                    `คำใบ้: <span class="text-blue-600 font-bold">${q.hint}</span><br><span class="text-base text-gray-500 mt-2 block">ลองอีกครั้ง! ถ้าตอบถูกได้ 5 คะแนน</span>`,
+                    false, 'retry'
                 );
-                speak("ยังไม่ถูกค่ะ ลองฟังคำใบ้นะคะ " + gameState.currentQData.hint);
+                speak("ยังไม่ถูกค่ะ ลองฟังคำใบ้นะคะ " + q.hint);
+            } else {
+                gameState.totalAnswered++;
+                revealAnswer("ยังไม่ถูกนะ 😢", "ยังไม่ถูกค่ะ");
             }
             updateHUD();
         }
 
+        function revealAnswer(title, spoken) {
+            const q = gameState.currentQData;
+            showModal(
+                title,
+                `คำตอบที่ถูกคือ <span class="text-green-600 font-extrabold">${q.ans}</span><br><span class="text-lg text-blue-600 font-bold">${q.exp}</span>`,
+                false, 'next'
+            );
+            speak(spoken + " คำตอบคือ " + q.exp);
+        }
+
         function handleAnswerTimeout() {
             gameState.isAnswering = true;
+            stopTimer();
             gameState.totalAnswered++;
             gameState.streak = 0;
-            showModal("หมดเวลา! ⏰", `ต้องตอบให้ไวกว่านี้นะ!<br>คำใบ้: <span class="text-blue-600">${gameState.currentQData.hint}</span>`, false);
-            speak("หมดเวลาค่ะ");
+            revealAnswer("หมดเวลา! ⏰", "หมดเวลาค่ะ");
             updateHUD();
         }
 
         function updateHUD() {
             document.getElementById('hud-score').innerText = gameState.score;
-            document.getElementById('hud-accuracy').innerText = Math.round((gameState.totalCorrect / Math.max(1, gameState.totalAnswered)) * 100) + '%';
-            
+            document.getElementById('hud-accuracy').innerText = gameState.totalAnswered
+                ? Math.round((gameState.firstTryCorrect / gameState.totalAnswered) * 100) + '%'
+                : '-';
+
             const streakC = document.getElementById('hud-streak-container');
             if (gameState.streak > 1) {
                 streakC.classList.remove('hidden');
@@ -564,42 +683,48 @@
             }
         }
 
-        function showModal(title, descHTML, isSuccess) {
-            const m = document.getElementById('modal-feedback');
+        function showModal(title, descHTML, isSuccess, action) {
             const titleEl = document.getElementById('modal-title');
             titleEl.innerText = title;
             titleEl.className = `text-4xl font-extrabold mb-4 ${isSuccess ? 'text-green-600' : 'text-orange-500'}`;
             document.getElementById('modal-desc').innerHTML = descHTML;
-            
-            const btn = document.getElementById('modal-btn');
-            btn.className = `w-full py-4 text-white text-2xl font-bold rounded-xl shadow-lg transition-colors ${isSuccess ? 'bg-green-500 hover:bg-green-600' : 'bg-orange-500 hover:bg-orange-600'}`;
-            btn.innerText = isSuccess ? "ไปข้อต่อไป" : "เข้าใจแล้ว ไปต่อ";
 
-            m.classList.remove('hidden');
-            
-            // Force pointer out of screen during modal
-            pointer.active = false;
-            arPointer.style.display = 'none';
+            modalBtn.className = `w-full py-4 text-white text-2xl font-bold rounded-xl shadow-lg transition-colors ${isSuccess ? 'bg-green-500 hover:bg-green-600' : 'bg-orange-500 hover:bg-orange-600'}`;
+            modalBtn.innerText = action === 'retry' ? "ลองตอบอีกครั้ง" : (isSuccess ? "ไปข้อต่อไป" : "เข้าใจแล้ว ไปต่อ");
+
+            gameState.modalAction = action;
+            gameState.modalReadyAt = performance.now() + MODAL_READ_DELAY;
+            setHoverTarget(null);
+            modalEl.classList.remove('hidden');
         }
 
-        function nextQuestion() {
-            document.getElementById('modal-feedback').classList.add('hidden');
-            gameState.qIndex++;
-            if(gameState.mode !== 'ar') pointer.active = true;
-            arPointer.style.display = 'block';
-            loadQuestion();
+        function handleModalButton() {
+            if (!isModalOpen()) return;
+            modalEl.classList.add('hidden');
+            setHoverTarget(null);
+            if (gameState.modalAction === 'retry') {
+                gameState.qToken++; // cancel the pending "start timer after speech"
+                gameState.isAnswering = false;
+                renderChoices();
+                startTimer(RETRY_TIME);
+                speak("ลองใหม่อีกครั้งค่ะ");
+            } else {
+                gameState.qIndex++;
+                loadQuestion();
+            }
         }
 
         function endGame() {
             cancelAnimationFrame(animationFrameId);
+            stopTimer();
             document.getElementById('screen-game').classList.add('hidden');
             document.getElementById('screen-game-over').classList.remove('hidden');
             arPointer.style.display = 'none';
-            
+
             document.getElementById('final-score').innerText = gameState.score;
             document.getElementById('final-correct').innerText = gameState.totalCorrect;
-            document.getElementById('final-accuracy').innerText = Math.round((gameState.totalCorrect / 15) * 100) + '%';
-            
+            document.getElementById('final-accuracy').innerText = Math.round((gameState.firstTryCorrect / 15) * 100) + '%';
+
             speak("จบเกมแล้วค่ะ เก่งมากๆ เลย");
         }
 
@@ -610,7 +735,7 @@
             const videoElement = document.getElementById('input_video');
             const canvasElement = document.getElementById('output_canvas');
             const canvasCtx = canvasElement.getContext('2d');
-            
+
             // Show canvas for drawing landmarks
             canvasElement.classList.remove('hidden');
             videoElement.classList.remove('hidden');
@@ -622,13 +747,26 @@
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
 
+            // Map a landmark (0..1 of the camera frame) to the same screen point the
+            // mirrored, object-fit: cover video shows it at
+            function toScreen(lm) {
+                const W = window.innerWidth, H = window.innerHeight;
+                const vw = videoElement.videoWidth || 1280, vh = videoElement.videoHeight || 720;
+                const scale = Math.max(W / vw, H / vh);
+                const dw = vw * scale, dh = vh * scale;
+                return {
+                    x: (W - dw) / 2 + (1 - lm.x) * dw,
+                    y: (H - dh) / 2 + lm.y * dh
+                };
+            }
+
             const hands = new Hands({locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
             }});
 
             hands.setOptions({
                 maxNumHands: 1,
-                modelComplexity: 1,
+                modelComplexity: 0, // lighter model: less lag on phones and laptops
                 minDetectionConfidence: 0.6,
                 minTrackingConfidence: 0.6
             });
@@ -637,30 +775,36 @@
                 // Only process if AR mode and game active
                 if (gameState.mode !== 'ar' || document.getElementById('screen-game').classList.contains('hidden')) return;
 
-                canvasCtx.save();
-                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                canvasCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
                 if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                    const landmarks = results.multiHandLandmarks[0];
-                    
-                    // Draw Hand Landmarks
-                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
-                    drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 2});
+                    const pts = results.multiHandLandmarks[0].map(toScreen);
 
-                    // Index Finger Tip is Landmark 8
-                    const indexFingerTip = landmarks[8];
-                    
-                    // Map to screen (Camera is mirrored, so x is 1 - x)
-                    const screenX = (1 - indexFingerTip.x) * window.innerWidth;
-                    const screenY = indexFingerTip.y * window.innerHeight;
+                    // Draw Hand Landmarks in screen space so they line up with the video
+                    canvasCtx.strokeStyle = '#00FF00';
+                    canvasCtx.lineWidth = 4;
+                    canvasCtx.beginPath();
+                    HAND_CONNECTIONS.forEach(([a, b]) => {
+                        canvasCtx.moveTo(pts[a].x, pts[a].y);
+                        canvasCtx.lineTo(pts[b].x, pts[b].y);
+                    });
+                    canvasCtx.stroke();
+                    canvasCtx.fillStyle = '#FF0000';
+                    pts.forEach(p => {
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                        canvasCtx.fill();
+                    });
 
-                    pointer.x = screenX;
-                    pointer.y = screenY;
+                    // Index Finger Tip is Landmark 8; smooth out jitter (jump straight there when the hand reappears)
+                    // ponytail: fixed-weight smoothing lags a little on fast moves, One Euro filter if that bothers players
+                    const k = pointer.active ? 0.5 : 1;
+                    pointer.x += (pts[8].x - pointer.x) * k;
+                    pointer.y += (pts[8].y - pointer.y) * k;
                     pointer.active = true;
                 } else {
                     pointer.active = false; // Hide if no hand detected
                 }
-                canvasCtx.restore();
             });
 
             const camera = new Camera(videoElement, {
